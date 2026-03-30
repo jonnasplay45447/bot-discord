@@ -29,6 +29,19 @@ client.on('messageCreate', async (message) => {
 
     jogadores.push(message.author.id);
 
+    // AVISAR ADM
+const admId = 705865164259459202;
+
+try {
+  const adm = await client.users.fetch(admId);
+  adm.send(`📥 Novo jogador entrou na fila!
+
+👤 Nome: ${message.author.tag}
+🆔 ID: ${message.author.id}
+📊 Posição: ${jogadores.length}`);
+} catch (err) {
+  console.log("Erro ao avisar ADM:", err);
+}
     await message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
 
     // apaga a mensagem do usuário
