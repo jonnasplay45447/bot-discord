@@ -30,7 +30,7 @@ client.on('messageCreate', async (message) => {
     jogadores.push(message.author.id);
 
     // AVISAR ADM
-const admId = 705865164259459202;
+const admId = "705865164259459202";
 
 try {
   const adm = await client.users.fetch(admId);
