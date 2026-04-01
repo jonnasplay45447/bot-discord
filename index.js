@@ -17,6 +17,13 @@ client.on('ready', () => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
+  // 🔒 CANAL PERMITIDO
+  const canalPermitido = "943302732738072606";
+
+  if (message.channel.id !== canalPermitido) {
+    return message.reply('❌ Use os comandos no canal correto!');
+  }
+
   // ENTRAR
   if (message.content === '!entrar') {
 
@@ -38,6 +45,7 @@ client.on('messageCreate', async (message) => {
       await adm.send(`📥 Novo jogador entrou!
 
 👤 ${message.author.tag}
+🆔 ${message.author.id}
 📊 Posição: ${jogadores.length}`);
     } catch (err) {
       console.log("Erro ao avisar ADM:", err);
@@ -108,6 +116,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-}); // ← FECHAMENTO CORRETO
+});
 
 client.login(process.env.TOKEN);
