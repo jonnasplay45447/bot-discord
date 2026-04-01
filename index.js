@@ -17,6 +17,7 @@ const client = new Client({
 let jogadores = [];
 let pagamentos = {};
 let timerAtivo = false;
+let filaAberta = false;
 
 // 🔥 ADMS
 const adms = [
@@ -121,10 +122,40 @@ client.on('messageCreate', async (message) => {
   }
 
   // ======================
+  // 🟢 ABRIR FILA
+  // ======================
+
+  if (message.content === '!abrirfila') {
+
+    if (!adms.includes(message.author.id)) return;
+
+    filaAberta = true;
+
+    message.channel.send('🟢 Fila aberta! Digite !entrar');
+  }
+
+  // ======================
+  // 🔴 FECHAR FILA
+  // ======================
+
+  if (message.content === '!fecharfila') {
+
+    if (!adms.includes(message.author.id)) return;
+
+    filaAberta = false;
+
+    message.channel.send('🔒 Fila fechada!');
+  }
+
+  // ======================
   // 🎮 ENTRAR
   // ======================
 
   if (message.content === '!entrar') {
+
+    if (!filaAberta) {
+      return message.reply('❌ A fila está fechada!');
+    }
 
     if (jogadores.length >= 10) {
       return message.reply('❌ Sala cheia!');
@@ -141,6 +172,9 @@ client.on('messageCreate', async (message) => {
     message.delete().catch(() => {});
 
     if (jogadores.length === 10) {
+
+      filaAberta = false;
+
       message.channel.send('🔥 Sala fechada! Confiram o privado.');
 
       jogadores.forEach(async (id) => {
@@ -212,10 +246,7 @@ client.on('messageCreate', async (message) => {
 
     message.channel.send(`🏁 Partida finalizada!
 
-👥 Jogadores: ${jogadores.length}
-💰 Pagantes: ${Object.values(pagamentos).filter(p => p).length}
-
-🔥 Nova partida liberada! Digite !entrar`);
+🔥 Use !abrirfila para iniciar nova partida`);
 
     jogadores = [];
     pagamentos = {};
