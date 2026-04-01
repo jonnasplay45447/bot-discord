@@ -17,7 +17,7 @@ const client = new Client({
 let jogadores = [];
 let pagamentos = {};
 
-// 🔥 DOIS ADMS
+// 🔥 ADMS
 const adms = [
   "705865164259459202",
   "1016493803487645736"
@@ -67,8 +67,12 @@ function gerarBotoes() {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
+  // 🔒 CANAL (SEM SPAM)
   if (message.channel.id !== canalPermitido) {
-    return message.reply('❌ Use os comandos no canal correto!');
+    if (message.content.startsWith('!')) {
+      return message.reply('❌ Use os comandos no canal correto!');
+    }
+    return;
   }
 
   // ======================
@@ -106,7 +110,7 @@ client.on('messageCreate', async (message) => {
 ⏱️ Tempo: 5 minutos`);
       });
 
-      // ENVIA PAINEL PARA TODOS OS ADMS
+      // ENVIA PAINEL PARA OS ADMS
       for (const admId of adms) {
         try {
           const adm = await client.users.fetch(admId);
@@ -158,13 +162,12 @@ client.on('messageCreate', async (message) => {
 });
 
 // ======================
-// 🔘 BOTÕES (2 ADMS)
+// 🔘 BOTÕES (ADM)
 // ======================
 
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
-  // 🔒 VERIFICA SE É ADM
   if (!adms.includes(interaction.user.id)) {
     return interaction.reply({ content: '❌ Apenas ADM!', ephemeral: true });
   }
