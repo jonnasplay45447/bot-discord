@@ -18,12 +18,15 @@ let jogadores = [];
 let pagamentos = {};
 let timerAtivo = false;
 
+// 🔥 ADMS
 const adms = [
   "705865164259459202",
   "1016493803487645736"
 ];
 
+// 📍 CANAIS
 const canalPermitido = "943302732738072606";
+const canalADM = "943302717865070632";
 
 client.on('ready', () => {
   console.log('🤖 Bot online!');
@@ -92,12 +95,10 @@ function iniciarTimer() {
       delete pagamentos[id];
     }
 
-    for (const admId of adms) {
-      try {
-        const adm = await client.users.fetch(admId);
-        adm.send(`⏱️ Timer finalizado!\n❌ Removidos: ${removidos.length}`);
-      } catch {}
-    }
+    const canal = await client.channels.fetch(canalADM);
+
+    canal.send(`⏱️ Timer finalizado!
+❌ Removidos: ${removidos.length}`);
 
     timerAtivo = false;
 
@@ -153,14 +154,12 @@ client.on('messageCreate', async (message) => {
 ⏱️ Tempo: 5 minutos`);
       });
 
-      for (const admId of adms) {
-        const adm = await client.users.fetch(admId);
+      const canal = await client.channels.fetch(canalADM);
 
-        adm.send({
-          content: gerarPainel(),
-          components: gerarBotoes()
-        });
-      }
+      canal.send({
+        content: gerarPainel(),
+        components: gerarBotoes()
+      });
 
       iniciarTimer();
     }
@@ -243,12 +242,11 @@ client.on('interactionCreate', async (interaction) => {
 
     const todosPagaram = jogadores.every(id => pagamentos[id] === true);
 
-    // 🚀 INÍCIO AUTOMÁTICO
     if (todosPagaram && jogadores.length > 0) {
 
-      const canal = await client.channels.fetch(canalPermitido);
+      const canalPublico = await client.channels.fetch(canalPermitido);
 
-      canal.send(`🎮 Todos pagaram!
+      canalPublico.send(`🎮 Todos pagaram!
 🔥 Partida iniciando...`);
 
       jogadores = [];
