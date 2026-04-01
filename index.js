@@ -17,7 +17,6 @@ const client = new Client({
 let jogadores = [];
 let pagamentos = {};
 
-// 🔥 ADMS
 const adms = [
   "705865164259459202",
   "1016493803487645736"
@@ -29,7 +28,7 @@ client.on('ready', () => {
   console.log('🤖 Bot online!');
 });
 
-// GERAR PAINEL
+// PAINEL
 function gerarPainel() {
   let texto = "💰 Controle de Pagamentos\n\n";
 
@@ -41,12 +40,10 @@ function gerarPainel() {
   return texto;
 }
 
-// GERAR BOTÕES
+// BOTÕES
 function gerarBotoes() {
-  const rows = [];
-
-  jogadores.forEach((id) => {
-    const row = new ActionRowBuilder().addComponents(
+  return jogadores.map(id =>
+    new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`pagar_${id}`)
         .setLabel(`✅ Confirmar`)
@@ -56,28 +53,53 @@ function gerarBotoes() {
         .setCustomId(`remover_${id}`)
         .setLabel(`❌ Remover`)
         .setStyle(ButtonStyle.Danger)
-    );
+    )
+  );
+}
 
-    rows.push(row);
-  });
+// ⏱️ TIMER DE PAGAMENTO
+async function iniciarTimer() {
+  setTimeout(async () => {
 
-  return rows;
+    let removidos = [];
+
+    jogadores = jogadores.filter(id => {
+      if (!pagamentos[id]) {
+        removidos.push(id);
+        return false;
+      }
+      return true;
+    });
+
+    // avisar removidos
+    for (const id of removidos) {
+      try {
+        const user = await client.users.fetch(id);
+        user.send('❌ Você foi removido por não realizar o pagamento no tempo.');
+      } catch {}
+      delete pagamentos[id];
+    }
+
+    // avisar ADM
+    for (const admId of adms) {
+      try {
+        const adm = await client.users.fetch(admId);
+        adm.send(`⏱️ Timer finalizado!\n❌ Removidos: ${removidos.length}`);
+      } catch {}
+    }
+
+  }, 5 * 60 * 1000); // 5 minutos
 }
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // 🔒 CANAL (SEM SPAM)
   if (message.channel.id !== canalPermitido) {
     if (message.content.startsWith('!')) {
       return message.reply('❌ Use os comandos no canal correto!');
     }
     return;
   }
-
-  // ======================
-  // 🎮 ENTRAR
-  // ======================
 
   if (message.content === '!entrar') {
 
@@ -95,7 +117,6 @@ client.on('messageCreate', async (message) => {
     await message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
     message.delete().catch(() => {});
 
-    // SALA CHEIA
     if (jogadores.length === 10) {
       message.channel.send('🔥 Sala fechada! Confiram o privado.');
 
@@ -110,25 +131,19 @@ client.on('messageCreate', async (message) => {
 ⏱️ Tempo: 5 minutos`);
       });
 
-      // ENVIA PAINEL PARA OS ADMS
+      // enviar painel pros adms
       for (const admId of adms) {
-        try {
-          const adm = await client.users.fetch(admId);
-
-          await adm.send({
-            content: gerarPainel(),
-            components: gerarBotoes()
-          });
-        } catch (err) {
-          console.log("Erro ao enviar painel pro ADM:", err);
-        }
+        const adm = await client.users.fetch(admId);
+        adm.send({
+          content: gerarPainel(),
+          components: gerarBotoes()
+        });
       }
+
+      // 🔥 INICIA TIMER
+      iniciarTimer();
     }
   }
-
-  // ======================
-  // 📋 FILA
-  // ======================
 
   if (message.content === '!fila') {
     if (jogadores.length === 0) {
@@ -142,10 +157,6 @@ client.on('messageCreate', async (message) => {
     message.reply(`📋 Fila:\n${lista}`);
   }
 
-  // ======================
-  // ❌ SAIR
-  // ======================
-
   if (message.content === '!sair') {
     const index = jogadores.indexOf(message.author.id);
 
@@ -158,13 +169,9 @@ client.on('messageCreate', async (message) => {
 
     message.reply('✅ Você saiu da fila!');
   }
-
 });
 
-// ======================
-// 🔘 BOTÕES (ADM)
-// ======================
-
+// BOTÕES
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
