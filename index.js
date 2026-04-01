@@ -53,7 +53,18 @@ try {
       jogadores.forEach(async (id) => {
         try {
           const user = await client.users.fetch(id);
-          await user.send('💸 Você tem 5 minutos para pagar via PIX!');
+          await user.send(`💸 PAGAMENTO VIA PIX
+
+👤 Sala confirmada!
+
+💰 Valor: R$5,00
+🔑 Chave PIX: 672aa93c-bae7-4c71-9711-ed676e7d3794
+
+⏱️ Tempo: 5 minutos
+
+📸 Envie o comprovante para o ADM.
+
+🚫 Caso não pague no prazo, será removido da fila.`);
         } catch (err) {
           console.log('Erro ao enviar DM:', err);
         }
@@ -75,16 +86,28 @@ try {
   }
 
   // COMANDO PRA SAIR
-  if (message.content === '!sair') {
-    const index = jogadores.indexOf(message.author.id);
+if (message.content === '!sair') {
+  const index = jogadores.indexOf(message.author.id);
 
-    if (index === -1) {
-      return message.reply('❌ Você não está na fila!');
-    }
+  if (index === -1) {
+    return message.reply('❌ Você não está na fila!');
+  }
 
-    jogadores.splice(index, 1);
+  jogadores.splice(index, 1);
 
-    message.reply('✅ Você saiu da fila!');
+  message.reply('✅ Você saiu da fila!');
+
+  // AVISAR ADM
+  const admId = "705865164259459202";
+
+  try {
+    const adm = await client.users.fetch(admId);
+    adm.send(`📤 Jogador saiu da fila!
+
+👤 Nome: ${message.author.tag}
+📊 Nova fila: ${jogadores.length} jogadores`);
+  } catch (err) {
+    console.log("Erro ao avisar ADM:", err);
   }
 });
 
