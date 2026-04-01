@@ -10,6 +10,9 @@ const client = new Client({
 
 let jogadores = [];
 
+const admId = "705865164259459202";
+const canalPermitido = "943302732738072606";
+
 client.on('ready', () => {
   console.log('🤖 Bot online!');
 });
@@ -18,13 +21,59 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   // 🔒 CANAL PERMITIDO
-  const canalPermitido = "943302732738072606";
-
   if (message.channel.id !== canalPermitido) {
     return message.reply('❌ Use os comandos no canal correto!');
   }
 
-  // ENTRAR
+  // ======================
+  // 🔒 COMANDOS DE ADM (DISCRETOS)
+  // ======================
+
+  if (message.content === '!resetar') {
+    if (message.author.id !== admId) return;
+
+    jogadores = [];
+    return message.reply('🗑️ Fila resetada!');
+  }
+
+  if (message.content.startsWith('!remover')) {
+    if (message.author.id !== admId) return;
+
+    const user = message.mentions.users.first();
+    if (!user) return message.reply('⚠️ Marque alguém para remover!');
+
+    const index = jogadores.indexOf(user.id);
+    if (index === -1) return message.reply('❌ Esse usuário não está na fila!');
+
+    jogadores.splice(index, 1);
+    return message.reply(`🗑️ ${user.username} foi removido da fila!`);
+  }
+
+  if (message.content === '!fechar') {
+    if (message.author.id !== admId) return;
+
+    message.channel.send('🔥 Sala fechada manualmente!');
+
+    jogadores.forEach(async (id) => {
+      try {
+        const user = await client.users.fetch(id);
+
+        await user.send(`💸 PAGAMENTO VIA PIX
+
+💰 Valor: R$5,00
+🔑 Chave PIX: 672aa93c-bae7-4c71-9711-ed676e7d3794
+
+⏱️ Tempo: 5 minutos`);
+      } catch (err) {
+        console.log('Erro ao enviar DM:', err);
+      }
+    });
+  }
+
+  // ======================
+  // 🎮 COMANDOS NORMAIS
+  // ======================
+
   if (message.content === '!entrar') {
 
     if (jogadores.length >= 10) {
@@ -38,8 +87,6 @@ client.on('messageCreate', async (message) => {
     jogadores.push(message.author.id);
 
     // AVISAR ADM
-    const admId = "705865164259459202";
-
     try {
       const adm = await client.users.fetch(admId);
       await adm.send(`📥 Novo jogador entrou!
@@ -77,7 +124,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // VER FILA
   if (message.content === '!fila') {
     if (jogadores.length === 0) {
       return message.reply('Fila vazia 😴');
@@ -90,7 +136,6 @@ client.on('messageCreate', async (message) => {
     message.reply(`📋 Fila:\n${lista}`);
   }
 
-  // SAIR
   if (message.content === '!sair') {
     const index = jogadores.indexOf(message.author.id);
 
@@ -103,8 +148,6 @@ client.on('messageCreate', async (message) => {
     message.reply('✅ Você saiu da fila!');
 
     // AVISAR ADM
-    const admId = "705865164259459202";
-
     try {
       const adm = await client.users.fetch(admId);
       await adm.send(`📤 Jogador saiu!
