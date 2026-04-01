@@ -17,6 +17,7 @@ client.on('ready', () => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
+  // ENTRAR
   if (message.content === '!entrar') {
 
     if (jogadores.length >= 10) {
@@ -30,41 +31,37 @@ client.on('messageCreate', async (message) => {
     jogadores.push(message.author.id);
 
     // AVISAR ADM
-const admId = "705865164259459202";
+    const admId = "705865164259459202";
 
-try {
-  const adm = await client.users.fetch(admId);
-  adm.send(`📥 Novo jogador entrou na fila!
+    try {
+      const adm = await client.users.fetch(admId);
+      await adm.send(`📥 Novo jogador entrou!
 
-👤 Nome: ${message.author.tag}
-🆔 ID: ${message.author.id}
+👤 ${message.author.tag}
 📊 Posição: ${jogadores.length}`);
-} catch (err) {
-  console.log("Erro ao avisar ADM:", err);
-}
-    await message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
+    } catch (err) {
+      console.log("Erro ao avisar ADM:", err);
+    }
 
-    // apaga a mensagem do usuário
+    await message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
     message.delete().catch(() => {});
 
+    // SALA CHEIA
     if (jogadores.length === 10) {
       message.channel.send('🔥 Sala fechada! Confiram o privado.');
 
       jogadores.forEach(async (id) => {
         try {
           const user = await client.users.fetch(id);
-          await user.send(`💸 PAGAMENTO VIA PIX
 
-👤 Sala confirmada!
+          await user.send(`💸 PAGAMENTO VIA PIX
 
 💰 Valor: R$5,00
 🔑 Chave PIX: 672aa93c-bae7-4c71-9711-ed676e7d3794
 
 ⏱️ Tempo: 5 minutos
 
-📸 Envie o comprovante para o ADM.
-
-🚫 Caso não pague no prazo, será removido da fila.`);
+📸 Envie o comprovante para o ADM.`);
         } catch (err) {
           console.log('Erro ao enviar DM:', err);
         }
@@ -72,7 +69,7 @@ try {
     }
   }
 
-  // COMANDO PRA VER FILA
+  // VER FILA
   if (message.content === '!fila') {
     if (jogadores.length === 0) {
       return message.reply('Fila vazia 😴');
@@ -85,31 +82,32 @@ try {
     message.reply(`📋 Fila:\n${lista}`);
   }
 
-  // COMANDO PRA SAIR
-if (message.content === '!sair') {
-  const index = jogadores.indexOf(message.author.id);
+  // SAIR
+  if (message.content === '!sair') {
+    const index = jogadores.indexOf(message.author.id);
 
-  if (index === -1) {
-    return message.reply('❌ Você não está na fila!');
+    if (index === -1) {
+      return message.reply('❌ Você não está na fila!');
+    }
+
+    jogadores.splice(index, 1);
+
+    message.reply('✅ Você saiu da fila!');
+
+    // AVISAR ADM
+    const admId = "705865164259459202";
+
+    try {
+      const adm = await client.users.fetch(admId);
+      await adm.send(`📤 Jogador saiu!
+
+👤 ${message.author.tag}
+📊 Restam: ${jogadores.length}`);
+    } catch (err) {
+      console.log("Erro ao avisar ADM:", err);
+    }
   }
 
-  jogadores.splice(index, 1);
+}); // ← FECHAMENTO CORRETO
 
-  message.reply('✅ Você saiu da fila!');
-
-  // AVISAR ADM
-  const admId = "705865164259459202";
-
-  try {
-    const adm = await client.users.fetch(admId);
-    adm.send(`📤 Jogador saiu da fila!
-
-👤 Nome: ${message.author.tag}
-📊 Nova fila: ${jogadores.length} jogadores`);
-  } catch (err) {
-    console.log("Erro ao avisar ADM:", err);
-  }
-});
-
-// LOGIN (só uma vez!)
 client.login(process.env.TOKEN);
