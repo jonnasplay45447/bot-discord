@@ -246,7 +246,7 @@ client.on('messageCreate', async (message) => {
 
     message.channel.send(`🏁 Partida finalizada!
 
-🔥 Use !abrirfila para iniciar nova partida`);
+novas partidas em breve!`);
 
     jogadores = [];
     pagamentos = {};
