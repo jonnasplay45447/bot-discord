@@ -1,10 +1,4 @@
-const { 
-  Client, 
-  GatewayIntentBits, 
-  ActionRowBuilder, 
-  ButtonBuilder, 
-  ButtonStyle 
-} = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
 
 const client = new Client({
   intents: [
@@ -14,97 +8,34 @@ const client = new Client({
   ]
 });
 
-let jogadores = [];
-let pagamentos = {};
-let timerAtivo = false;
-let filaAberta = false;
+// ======================
+// ⚙️ CONFIG
+// ======================
 
-// 🔥 ADMS
 const adms = [
   "705865164259459202",
   "1016493803487645736"
 ];
 
-// 📍 CANAIS
 const canalPermitido = "943302732738072606";
-const canalADM = "943302717865070632";
+
+// 🔥 SEUS CARGOS
+const cargoFila = "943302704275550208"; // Na Fila ⚠️
+const cargoPago = "1489100736225870015"; // PG✅
+
+// ======================
+
+let jogadores = [];
+let filaAberta = false;
+let filaFechada = false;
+
+// ======================
+// 🤖 READY
+// ======================
 
 client.on('ready', () => {
   console.log('🤖 Bot online!');
 });
-
-// ======================
-// 📊 PAINEL
-// ======================
-
-function gerarPainel() {
-  let texto = "💰 Controle de Pagamentos\n\n";
-
-  jogadores.forEach((id, i) => {
-    const status = pagamentos[id] ? "✅ Pago" : "❌ Pendente";
-    texto += `${i + 1}. <@${id}> - ${status}\n`;
-  });
-
-  return texto;
-}
-
-// ======================
-// 🔘 BOTÕES
-// ======================
-
-function gerarBotoes() {
-  return jogadores.map(id =>
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`pagar_${id}`)
-        .setLabel('✅ Confirmar')
-        .setStyle(ButtonStyle.Success),
-
-      new ButtonBuilder()
-        .setCustomId(`remover_${id}`)
-        .setLabel('❌ Remover')
-        .setStyle(ButtonStyle.Danger)
-    )
-  );
-}
-
-// ======================
-// ⏱️ TIMER
-// ======================
-
-function iniciarTimer() {
-  if (timerAtivo) return;
-  timerAtivo = true;
-
-  setTimeout(async () => {
-
-    let removidos = [];
-
-    jogadores = jogadores.filter(id => {
-      if (!pagamentos[id]) {
-        removidos.push(id);
-        return false;
-      }
-      return true;
-    });
-
-    for (const id of removidos) {
-      try {
-        const user = await client.users.fetch(id);
-        user.send('❌ Você foi removido por não pagar em 5 minutos.');
-      } catch {}
-      delete pagamentos[id];
-    }
-
-    const canal = await client.channels.fetch(canalADM);
-
-    canal.send(`⏱️ Timer finalizado!
-❌ Removidos: ${removidos.length}`);
-
-    timerAtivo = false;
-
-  }, 5 * 60 * 1000);
-}
 
 // ======================
 // 💬 MENSAGENS
@@ -113,13 +44,15 @@ function iniciarTimer() {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // 🔒 canal sem spam
+  // 🔒 canal único
   if (message.channel.id !== canalPermitido) {
     if (message.content.startsWith('!')) {
       return message.reply('❌ Use os comandos no canal correto!');
     }
     return;
   }
+
+  const member = message.member;
 
   // ======================
   // 🟢 ABRIR FILA
@@ -130,21 +63,10 @@ client.on('messageCreate', async (message) => {
     if (!adms.includes(message.author.id)) return;
 
     filaAberta = true;
+    filaFechada = false;
+    jogadores = [];
 
     message.channel.send('🟢 Fila aberta! Digite !entrar');
-  }
-
-  // ======================
-  // 🔴 FECHAR FILA
-  // ======================
-
-  if (message.content === '!fecharfila') {
-
-    if (!adms.includes(message.author.id)) return;
-
-    filaAberta = false;
-
-    message.channel.send('🔒 Fila fechada!');
   }
 
   // ======================
@@ -157,46 +79,89 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ A fila está fechada!');
     }
 
+    if (filaFechada) {
+      return message.reply('❌ A fila já foi fechada!');
+    }
+
+    if (jogadores.includes(message.author.id)) {
+      return message.reply('⚠️ Você já está na fila!');
+    }
+
     if (jogadores.length >= 10) {
       return message.reply('❌ Sala cheia!');
     }
 
-    if (jogadores.includes(message.author.id)) {
-      return message.reply('⚠️ Você já está na lista!');
-    }
-
     jogadores.push(message.author.id);
-    pagamentos[message.author.id] = false;
 
-    await message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
-    message.delete().catch(() => {});
+    // 🎭 DAR CARGO
+    await member.roles.add(cargoFila).catch((err) => {
+      console.log("Erro ao dar cargo:", err);
+    });
 
+    message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
+
+    // 🔒 FECHAR COM 10
     if (jogadores.length === 10) {
 
+      filaFechada = true;
       filaAberta = false;
 
-      message.channel.send('🔥 Sala fechada! Confiram o privado.');
+      message.channel.send(`🔥 Fila fechada!
 
-      jogadores.forEach(async (id) => {
-        const user = await client.users.fetch(id);
-
-        await user.send(`💸 PAGAMENTO VIA PIX
-
-💰 Valor: R$5,00
-🔑 Chave PIX: 672aa93c-bae7-4c71-9711-ed676e7d3794
-
-⏱️ Tempo: 5 minutos`);
-      });
-
-      const canal = await client.channels.fetch(canalADM);
-
-      canal.send({
-        content: gerarPainel(),
-        components: gerarBotoes()
-      });
-
-      iniciarTimer();
+🎟️ Liberado acesso ao canal de inscrição!
+Envie seu comprovante no ticket.`);
     }
+  }
+
+  // ======================
+  // ❌ SAIR
+  // ======================
+
+  if (message.content === '!sair') {
+
+    if (filaFechada) {
+      return message.reply('❌ Não é possível sair após fechar a fila!');
+    }
+
+    const index = jogadores.indexOf(message.author.id);
+
+    if (index === -1) {
+      return message.reply('❌ Você não está na fila!');
+    }
+
+    jogadores.splice(index, 1);
+
+    // ❌ REMOVE CARGO
+    await member.roles.remove(cargoFila).catch((err) => {
+      console.log("Erro ao remover cargo:", err);
+    });
+
+    message.reply('✅ Você saiu da fila!');
+  }
+
+  // ======================
+  // ❌ REMOVER (ADM)
+  // ======================
+
+  if (message.content.startsWith('!remover')) {
+
+    if (!adms.includes(message.author.id)) return;
+
+    const user = message.mentions.users.first();
+    if (!user) return message.reply('❌ Marque alguém!');
+
+    const index = jogadores.indexOf(user.id);
+    if (index === -1) {
+      return message.reply('❌ Esse usuário não está na fila!');
+    }
+
+    jogadores.splice(index, 1);
+
+    const membro = await message.guild.members.fetch(user.id);
+
+    await membro.roles.remove(cargoFila).catch(() => {});
+
+    message.channel.send(`❌ ${user.tag} foi removido da fila`);
   }
 
   // ======================
@@ -204,6 +169,7 @@ client.on('messageCreate', async (message) => {
   // ======================
 
   if (message.content === '!fila') {
+
     if (jogadores.length === 0) {
       return message.reply('Fila vazia 😴');
     }
@@ -216,23 +182,6 @@ client.on('messageCreate', async (message) => {
   }
 
   // ======================
-  // ❌ SAIR
-  // ======================
-
-  if (message.content === '!sair') {
-    const index = jogadores.indexOf(message.author.id);
-
-    if (index === -1) {
-      return message.reply('❌ Você não está na fila!');
-    }
-
-    jogadores.splice(index, 1);
-    delete pagamentos[message.author.id];
-
-    message.reply('✅ Você saiu da fila!');
-  }
-
-  // ======================
   // 🏁 FINALIZAR
   // ======================
 
@@ -240,72 +189,27 @@ client.on('messageCreate', async (message) => {
 
     if (!adms.includes(message.author.id)) return;
 
-    if (jogadores.length === 0) {
-      return message.reply('❌ Não há partida ativa!');
+    for (const id of jogadores) {
+      try {
+        const membro = await message.guild.members.fetch(id);
+
+        await membro.roles.remove(cargoFila).catch(() => {});
+        await membro.roles.remove(cargoPago).catch(() => {});
+      } catch {}
     }
+
+    jogadores = [];
+    filaAberta = false;
+    filaFechada = false;
 
     message.channel.send(`🏁 Partida finalizada!
 
-novas partidas em breve!`);
-
-    jogadores = [];
-    pagamentos = {};
+ ⚡ Quem não conseguiu entrar fica ligado, pois novas partidas serão anunciadas em breve.
+🎮 Continue acompanhando o JJ Diários para não perder as próximas!`);
   }
 
 });
 
 // ======================
-// 🔘 BOTÕES
-// ======================
-
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  if (!adms.includes(interaction.user.id)) {
-    return interaction.reply({ content: '❌ Apenas ADM!', ephemeral: true });
-  }
-
-  const [acao, userId] = interaction.customId.split('_');
-
-  // ✅ PAGAR
-  if (acao === 'pagar') {
-    pagamentos[userId] = true;
-
-    const todosPagaram = jogadores.every(id => pagamentos[id] === true);
-
-    if (todosPagaram && jogadores.length > 0) {
-
-      const canalPublico = await client.channels.fetch(canalPermitido);
-
-      canalPublico.send(`🎮 Todos pagaram!
-🔥 Partida iniciando...`);
-
-      jogadores = [];
-      pagamentos = {};
-      timerAtivo = false;
-
-      return interaction.update({
-        content: "✅ Todos pagaram! Partida iniciada!",
-        components: []
-      });
-    }
-
-    return interaction.update({
-      content: gerarPainel(),
-      components: gerarBotoes()
-    });
-  }
-
-  // ❌ REMOVER
-  if (acao === 'remover') {
-    jogadores = jogadores.filter(id => id !== userId);
-    delete pagamentos[userId];
-
-    return interaction.update({
-      content: gerarPainel(),
-      components: gerarBotoes()
-    });
-  }
-});
 
 client.login(process.env.TOKEN);
