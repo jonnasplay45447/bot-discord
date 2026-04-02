@@ -93,8 +93,7 @@ client.on('messageCreate', async (message) => {
 
     jogadores.push(message.author.id);
 
-    // 🎭 DAR CARGO
-    await member.roles.add(cargoFila).catch((err) => {
+    await member.roles.add(cargoFila).catch(err => {
       console.log("Erro ao dar cargo:", err);
     });
 
@@ -131,10 +130,7 @@ Envie seu comprovante no ticket.`);
 
     jogadores.splice(index, 1);
 
-    // ❌ REMOVE CARGO
-    await member.roles.remove(cargoFila).catch((err) => {
-      console.log("Erro ao remover cargo:", err);
-    });
+    await member.roles.remove(cargoFila).catch(() => {});
 
     message.reply('✅ Você saiu da fila!');
   }
@@ -182,21 +178,28 @@ Envie seu comprovante no ticket.`);
   }
 
   // ======================
-  // 🏁 FINALIZAR
+  // 🏁 FINALIZAR (VERSÃO FORTE)
   // ======================
 
   if (message.content === '!finalizar') {
 
     if (!adms.includes(message.author.id)) return;
 
-    for (const id of jogadores) {
-      try {
-        const membro = await message.guild.members.fetch(id);
+    const membros = await message.guild.members.fetch();
 
-        await membro.roles.remove(cargoFila).catch(() => {});
-        await membro.roles.remove(cargoPago).catch(() => {});
-      } catch {}
-    }
+    membros.forEach(async (membro) => {
+      try {
+        if (membro.roles.cache.has(cargoFila)) {
+          await membro.roles.remove(cargoFila);
+        }
+
+        if (membro.roles.cache.has(cargoPago)) {
+          await membro.roles.remove(cargoPago);
+        }
+      } catch (err) {
+        console.log("Erro ao remover cargo:", err);
+      }
+    });
 
     jogadores = [];
     filaAberta = false;
@@ -204,7 +207,7 @@ Envie seu comprovante no ticket.`);
 
     message.channel.send(`🏁 Partida finalizada!
 
- ⚡ Quem não conseguiu entrar fica ligado, pois novas partidas serão anunciadas em breve.
+⚡ Quem não conseguiu entrar fica ligado, pois novas partidas serão anunciadas em breve.
 🎮 Continue acompanhando o JJ Diários para não perder as próximas!`);
   }
 
