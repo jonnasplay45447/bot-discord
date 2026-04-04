@@ -19,7 +19,6 @@ const canalTicket = "1489094389698527334";
 const cargoFila = "943302704275550208";
 const cargoPago = "1489100736225870015";
 
-// ⏱️ TEMPO (10 minutos)
 const tempoPagamento = 10 * 60 * 1000;
 
 // ======================
@@ -42,6 +41,7 @@ client.on('messageCreate', async (message) => {
 
   const member = message.member;
 
+  // canal único
   if (message.channel.id !== canalPermitido) {
     if (message.content.startsWith('!')) {
       return message.reply('❌ Use os comandos no canal correto!');
@@ -90,7 +90,6 @@ client.on('messageCreate', async (message) => {
 
     message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
 
-    // 🔒 FECHAR COM 10
     if (jogadores.length === 10) {
 
       filaFechada = true;
@@ -160,6 +159,23 @@ client.on('messageCreate', async (message) => {
   }
 
   // ======================
+  // 📋 FILA
+  // ======================
+
+  if (message.content === '!fila') {
+
+    if (jogadores.length === 0) {
+      return message.reply('Fila vazia 😴');
+    }
+
+    const lista = jogadores
+      .map((id, i) => `<@${id}> - ${i + 1}`)
+      .join('\n');
+
+    message.reply(`📋 Fila:\n${lista}`);
+  }
+
+  // ======================
   // 🏁 FINALIZAR
   // ======================
 
@@ -194,7 +210,7 @@ client.on('messageCreate', async (message) => {
 });
 
 // ======================
-// ⏱️ TIMER DE PAGAMENTO
+// ⏱️ TIMER
 // ======================
 
 function iniciarTimer(guild, channel) {
@@ -204,31 +220,26 @@ function iniciarTimer(guild, channel) {
   timerPagamento = setTimeout(async () => {
 
     let removidos = [];
+    let novosJogadores = [];
 
     for (const id of jogadores) {
 
       try {
         const membro = await guild.members.fetch(id);
 
-        // ❌ NÃO PAGOU
         if (!membro.roles.cache.has(cargoPago)) {
 
           await membro.roles.remove(cargoFila).catch(() => {});
           removidos.push(`<@${id}>`);
+
+        } else {
+          novosJogadores.push(id);
         }
 
       } catch {}
     }
 
-    // 🔥 REMOVE DA LISTA
-    jogadores = jogadores.filter(async (id) => {
-      try {
-        const membro = await guild.members.fetch(id);
-        return membro.roles.cache.has(cargoPago);
-      } catch {
-        return false;
-      }
-    });
+    jogadores = novosJogadores;
 
     if (removidos.length > 0) {
       channel.send(`⏰ Tempo esgotado!
@@ -237,7 +248,6 @@ function iniciarTimer(guild, channel) {
 ${removidos.join('\n')}`);
     }
 
-    // 🔓 REABRIR FILA
     filaFechada = false;
     filaAberta = true;
 
