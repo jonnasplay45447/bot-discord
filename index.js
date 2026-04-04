@@ -12,25 +12,23 @@ const client = new Client({
 // ⚙️ CONFIG
 // ======================
 
-const adms = [
-  "705865164259459202",
-  "1016493803487645736"
-];
-
+const cargoAdmin = "943302582816890973";
 const canalPermitido = "943302732738072606";
+const canalTicket = "1489094389698527334";
 
-// 🔥 SEUS CARGOS
-const cargoFila = "943302704275550208"; // Na Fila ⚠️
-const cargoPago = "1489100736225870015"; // PG✅
+const cargoFila = "943302704275550208";
+const cargoPago = "1489100736225870015";
+
+// ⏱️ TEMPO (10 minutos)
+const tempoPagamento = 10 * 60 * 1000;
 
 // ======================
 
 let jogadores = [];
 let filaAberta = false;
 let filaFechada = false;
+let timerPagamento = null;
 
-// ======================
-// 🤖 READY
 // ======================
 
 client.on('ready', () => {
@@ -38,13 +36,12 @@ client.on('ready', () => {
 });
 
 // ======================
-// 💬 MENSAGENS
-// ======================
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // 🔒 canal único
+  const member = message.member;
+
   if (message.channel.id !== canalPermitido) {
     if (message.content.startsWith('!')) {
       return message.reply('❌ Use os comandos no canal correto!');
@@ -52,7 +49,7 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  const member = message.member;
+  const isAdmin = member.roles.cache.has(cargoAdmin);
 
   // ======================
   // 🟢 ABRIR FILA
@@ -60,7 +57,7 @@ client.on('messageCreate', async (message) => {
 
   if (message.content === '!abrirfila') {
 
-    if (!adms.includes(message.author.id)) return;
+    if (!isAdmin) return;
 
     filaAberta = true;
     filaFechada = false;
@@ -79,10 +76,6 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ A fila está fechada!');
     }
 
-    if (filaFechada) {
-      return message.reply('❌ A fila já foi fechada!');
-    }
-
     if (jogadores.includes(message.author.id)) {
       return message.reply('⚠️ Você já está na fila!');
     }
@@ -93,9 +86,7 @@ client.on('messageCreate', async (message) => {
 
     jogadores.push(message.author.id);
 
-    await member.roles.add(cargoFila).catch(err => {
-      console.log("Erro ao dar cargo:", err);
-    });
+    await member.roles.add(cargoFila).catch(() => {});
 
     message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
 
@@ -107,8 +98,10 @@ client.on('messageCreate', async (message) => {
 
       message.channel.send(`🔥 Fila fechada!
 
-🎟️ Liberado acesso ao canal de inscrição!
-Envie seu comprovante no ticket.`);
+🎟️ Vá até o canal <#${canalTicket}> e abra seu ticket para enviar o comprovante.
+⏱️ Você tem 10 minutos para pagar!`);
+
+      iniciarTimer(message.guild, message.channel);
     }
   }
 
@@ -141,7 +134,7 @@ Envie seu comprovante no ticket.`);
 
   if (message.content.startsWith('!remover')) {
 
-    if (!adms.includes(message.author.id)) return;
+    if (!isAdmin) return;
 
     const user = message.mentions.users.first();
     if (!user) return message.reply('❌ Marque alguém!');
@@ -154,52 +147,39 @@ Envie seu comprovante no ticket.`);
     jogadores.splice(index, 1);
 
     const membro = await message.guild.members.fetch(user.id);
-
     await membro.roles.remove(cargoFila).catch(() => {});
 
     message.channel.send(`❌ ${user.tag} foi removido da fila`);
-  }
 
-  // ======================
-  // 📋 FILA
-  // ======================
+    if (jogadores.length < 10 && filaFechada) {
+      filaFechada = false;
+      filaAberta = true;
 
-  if (message.content === '!fila') {
-
-    if (jogadores.length === 0) {
-      return message.reply('Fila vazia 😴');
+      message.channel.send('♻️ Vaga liberada! Fila reaberta.');
     }
-
-    const lista = jogadores
-      .map((id, i) => `<@${id}> - ${i + 1}`)
-      .join('\n');
-
-    message.reply(`📋 Fila:\n${lista}`);
   }
 
   // ======================
-  // 🏁 FINALIZAR (VERSÃO FORTE)
+  // 🏁 FINALIZAR
   // ======================
 
   if (message.content === '!finalizar') {
 
-    if (!adms.includes(message.author.id)) return;
+    if (!isAdmin) return;
 
-    const membros = await message.guild.members.fetch();
+    if (timerPagamento) clearTimeout(timerPagamento);
 
-    membros.forEach(async (membro) => {
-      try {
-        if (membro.roles.cache.has(cargoFila)) {
-          await membro.roles.remove(cargoFila);
-        }
+    const membros = message.guild.members.cache;
 
-        if (membro.roles.cache.has(cargoPago)) {
-          await membro.roles.remove(cargoPago);
-        }
-      } catch (err) {
-        console.log("Erro ao remover cargo:", err);
+    for (const membro of membros.values()) {
+      if (membro.roles.cache.has(cargoFila)) {
+        await membro.roles.remove(cargoFila).catch(() => {});
       }
-    });
+
+      if (membro.roles.cache.has(cargoPago)) {
+        await membro.roles.remove(cargoPago).catch(() => {});
+      }
+    }
 
     jogadores = [];
     filaAberta = false;
@@ -212,6 +192,59 @@ Envie seu comprovante no ticket.`);
   }
 
 });
+
+// ======================
+// ⏱️ TIMER DE PAGAMENTO
+// ======================
+
+function iniciarTimer(guild, channel) {
+
+  if (timerPagamento) clearTimeout(timerPagamento);
+
+  timerPagamento = setTimeout(async () => {
+
+    let removidos = [];
+
+    for (const id of jogadores) {
+
+      try {
+        const membro = await guild.members.fetch(id);
+
+        // ❌ NÃO PAGOU
+        if (!membro.roles.cache.has(cargoPago)) {
+
+          await membro.roles.remove(cargoFila).catch(() => {});
+          removidos.push(`<@${id}>`);
+        }
+
+      } catch {}
+    }
+
+    // 🔥 REMOVE DA LISTA
+    jogadores = jogadores.filter(async (id) => {
+      try {
+        const membro = await guild.members.fetch(id);
+        return membro.roles.cache.has(cargoPago);
+      } catch {
+        return false;
+      }
+    });
+
+    if (removidos.length > 0) {
+      channel.send(`⏰ Tempo esgotado!
+
+❌ Removidos por não pagamento:
+${removidos.join('\n')}`);
+    }
+
+    // 🔓 REABRIR FILA
+    filaFechada = false;
+    filaAberta = true;
+
+    channel.send('♻️ Fila reaberta! Novos jogadores podem entrar.');
+
+  }, tempoPagamento);
+}
 
 // ======================
 
