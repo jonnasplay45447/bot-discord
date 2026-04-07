@@ -24,6 +24,7 @@ const tempoPagamento = 10 * 60 * 1000;
 // ======================
 
 let jogadores = [];
+let reserva = [];
 let filaAberta = false;
 let filaFechada = false;
 let timerPagamento = null;
@@ -41,7 +42,6 @@ client.on('messageCreate', async (message) => {
 
   const member = message.member;
 
-  // canal único
   if (message.channel.id !== canalPermitido) {
     if (message.content.startsWith('!')) {
       return message.reply('❌ Use os comandos no canal correto!');
@@ -59,9 +59,11 @@ client.on('messageCreate', async (message) => {
 
     if (!isAdmin) return;
 
+    jogadores = [];
+    reserva = [];
+
     filaAberta = true;
     filaFechada = false;
-    jogadores = [];
 
     message.channel.send('🟢 Fila aberta! Digite !entrar');
   }
@@ -76,31 +78,41 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ A fila está fechada!');
     }
 
-    if (jogadores.includes(message.author.id)) {
+    if (jogadores.includes(message.author.id) || reserva.includes(message.author.id)) {
       return message.reply('⚠️ Você já está na fila!');
     }
 
-    if (jogadores.length >= 10) {
-      return message.reply('❌ Sala cheia!');
-    }
+    // 🔥 FILA PRINCIPAL
+    if (jogadores.length < 10) {
 
-    jogadores.push(message.author.id);
+      jogadores.push(message.author.id);
+      await member.roles.add(cargoFila).catch(() => {});
 
-    await member.roles.add(cargoFila).catch(() => {});
+      message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
 
-    message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
+      if (jogadores.length === 10) {
+        filaFechada = true;
+        filaAberta = false;
 
-    if (jogadores.length === 10) {
+        message.channel.send(`🔥 Fila principal fechada!
 
-      filaFechada = true;
-      filaAberta = false;
+🎟️ Vá até o canal <#${canalTicket}> e abra seu ticket.
+⏱️ Você tem 10 minutos para pagar!
 
-      message.channel.send(`🔥 Fila fechada!
+📌 Agora a fila de espera está aberta (até 20 jogadores).`);
 
-🎟️ Vá até o canal <#${canalTicket}> e abra seu ticket para enviar o comprovante.
-⏱️ Você tem 10 minutos para pagar!`);
+        iniciarTimer(message.guild, message.channel);
+      }
 
-      iniciarTimer(message.guild, message.channel);
+    } else if (reserva.length < 10) {
+
+      // 🕐 FILA RESERVA
+      reserva.push(message.author.id);
+
+      message.channel.send(`⏱️ ${message.author.username} entrou na fila de espera (${reserva.length}/10)`);
+
+    } else {
+      return message.reply('❌ Fila e reserva cheias!');
     }
   }
 
@@ -111,51 +123,25 @@ client.on('messageCreate', async (message) => {
   if (message.content === '!sair') {
 
     if (filaFechada) {
-      return message.reply('❌ Não é possível sair após fechar a fila!');
+      return message.reply('❌ Não é possível sair após fechar!');
     }
 
-    const index = jogadores.indexOf(message.author.id);
+    let index = jogadores.indexOf(message.author.id);
 
-    if (index === -1) {
-      return message.reply('❌ Você não está na fila!');
+    if (index !== -1) {
+      jogadores.splice(index, 1);
+      await member.roles.remove(cargoFila).catch(() => {});
+      return message.reply('✅ Você saiu da fila!');
     }
 
-    jogadores.splice(index, 1);
+    index = reserva.indexOf(message.author.id);
 
-    await member.roles.remove(cargoFila).catch(() => {});
-
-    message.reply('✅ Você saiu da fila!');
-  }
-
-  // ======================
-  // ❌ REMOVER (ADM)
-  // ======================
-
-  if (message.content.startsWith('!remover')) {
-
-    if (!isAdmin) return;
-
-    const user = message.mentions.users.first();
-    if (!user) return message.reply('❌ Marque alguém!');
-
-    const index = jogadores.indexOf(user.id);
-    if (index === -1) {
-      return message.reply('❌ Esse usuário não está na fila!');
+    if (index !== -1) {
+      reserva.splice(index, 1);
+      return message.reply('✅ Você saiu da fila de espera!');
     }
 
-    jogadores.splice(index, 1);
-
-    const membro = await message.guild.members.fetch(user.id);
-    await membro.roles.remove(cargoFila).catch(() => {});
-
-    message.channel.send(`❌ ${user.tag} foi removido da fila`);
-
-    if (jogadores.length < 10 && filaFechada) {
-      filaFechada = false;
-      filaAberta = true;
-
-      message.channel.send('♻️ Vaga liberada! Fila reaberta.');
-    }
+    return message.reply('❌ Você não está na fila!');
   }
 
   // ======================
@@ -164,15 +150,24 @@ client.on('messageCreate', async (message) => {
 
   if (message.content === '!fila') {
 
-    if (jogadores.length === 0) {
-      return message.reply('Fila vazia 😴');
+    let texto = "📋 Fila:\n";
+
+    jogadores.forEach((id, i) => {
+      texto += `<@${id}> - ${i + 1}\n`;
+    });
+
+    if (reserva.length > 0) {
+
+      texto += `\n⏱️ Fila de espera:\n`;
+
+      reserva.forEach((id, i) => {
+        texto += `<@${id}> - ${i + 11}\n`;
+      });
+
+      texto += `\n⚡ Caso alguém da fila principal não pague, o próximo da fila de espera assume automaticamente!`;
     }
 
-    const lista = jogadores
-      .map((id, i) => `<@${id}> - ${i + 1}`)
-      .join('\n');
-
-    message.reply(`📋 Fila:\n${lista}`);
+    message.reply(texto);
   }
 
   // ======================
@@ -191,13 +186,13 @@ client.on('messageCreate', async (message) => {
       if (membro.roles.cache.has(cargoFila)) {
         await membro.roles.remove(cargoFila).catch(() => {});
       }
-
       if (membro.roles.cache.has(cargoPago)) {
         await membro.roles.remove(cargoPago).catch(() => {});
       }
     }
 
     jogadores = [];
+    reserva = [];
     filaAberta = false;
     filaFechada = false;
 
@@ -220,38 +215,41 @@ function iniciarTimer(guild, channel) {
   timerPagamento = setTimeout(async () => {
 
     let removidos = [];
-    let novosJogadores = [];
 
     for (const id of jogadores) {
 
-      try {
-        const membro = await guild.members.fetch(id);
+      const membro = await guild.members.fetch(id);
 
-        if (!membro.roles.cache.has(cargoPago)) {
+      if (!membro.roles.cache.has(cargoPago)) {
 
-          await membro.roles.remove(cargoFila).catch(() => {});
-          removidos.push(`<@${id}>`);
-
-        } else {
-          novosJogadores.push(id);
-        }
-
-      } catch {}
+        await membro.roles.remove(cargoFila).catch(() => {});
+        removidos.push(id);
+      }
     }
 
-    jogadores = novosJogadores;
+    // remove quem não pagou
+    jogadores = jogadores.filter(id => !removidos.includes(id));
+
+    // 🔥 PUXA DA RESERVA
+    while (jogadores.length < 10 && reserva.length > 0) {
+
+      const novo = reserva.shift();
+      jogadores.push(novo);
+
+      const membro = await guild.members.fetch(novo);
+      await membro.roles.add(cargoFila).catch(() => {});
+
+      channel.send(`🔄 <@${novo}> entrou da fila de espera para a principal!`);
+    }
 
     if (removidos.length > 0) {
-      channel.send(`⏰ Tempo esgotado!
-
-❌ Removidos por não pagamento:
-${removidos.join('\n')}`);
+      channel.send(`⏰ Removidos por não pagamento:\n${removidos.map(id => `<@${id}>`).join('\n')}`);
     }
 
-    filaFechada = false;
     filaAberta = true;
+    filaFechada = false;
 
-    channel.send('♻️ Fila reaberta! Novos jogadores podem entrar.');
+    channel.send('♻️ Fila reaberta!');
 
   }, tempoPagamento);
 }
