@@ -1,33 +1,33 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const {
+  Client,
+  GatewayIntentBits,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder
+} = require('discord.js');
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
 // ======================
-// ⚙️ CONFIG
+// ⚙️ CONFIG (JÁ AJUSTADO PRA VOCÊ)
 // ======================
 
 const cargoAdmin = "943302582816890973";
-const canalPermitido = "943302732738072606";
-const canalTicket = "1489094389698527334";
-
 const cargoFila = "943302704275550208";
 const cargoPago = "1489100736225870015";
 
-const tempoPagamento = 10 * 60 * 1000;
+const canalPermitido = "943302732738072606";
+const canalTicket = "1489094389698527334";
+
+const pix = "672aa93c-bae7-4c71-9711-ed676e7d3794";
 
 // ======================
 
-let jogadores = [];
-let reserva = [];
-let filaAberta = false;
-let filaFechada = false;
-let timerPagamento = null;
+let fila = [];
+let painelMessage = null;
 
 // ======================
 
@@ -36,12 +36,13 @@ client.on('ready', () => {
 });
 
 // ======================
+// 📤 COMANDOS
+// ======================
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  const member = message.member;
-
+  // só responde comandos no canal correto
   if (message.channel.id !== canalPermitido) {
     if (message.content.startsWith('!')) {
       return message.reply('❌ Use os comandos no canal correto!');
@@ -49,125 +50,44 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  const isAdmin = member.roles.cache.has(cargoAdmin);
+  const isAdmin = message.member.roles.cache.has(cargoAdmin);
 
   // ======================
-  // 🟢 ABRIR FILA
+  // 🎛️ PAINEL
   // ======================
 
-  if (message.content === '!abrirfila') {
+  if (message.content === '!painel') {
 
     if (!isAdmin) return;
 
-    jogadores = [];
-    reserva = [];
-
-    filaAberta = true;
-    filaFechada = false;
-
-    message.channel.send('🟢 Fila aberta! Digite !entrar');
-  }
-
-  // ======================
-  // 🎮 ENTRAR
-  // ======================
-
-  if (message.content === '!entrar') {
-
-    if (!filaAberta) {
-      return message.reply('❌ A fila está fechada!');
+    if (painelMessage) {
+      return message.reply('❌ Já existe um painel ativo!');
     }
 
-    if (jogadores.includes(message.author.id) || reserva.includes(message.author.id)) {
-      return message.reply('⚠️ Você já está na fila!');
-    }
+    const embed = new EmbedBuilder()
+      .setTitle("💰 Sala | R$5,00")
+      .setDescription("🎮 Fila:\nNinguém na fila.")
+      .setColor("Yellow")
+      .setFooter({ text: "💸 Prêmio: R$10 + R$3 por kill" });
 
-    // 🔥 FILA PRINCIPAL
-    if (jogadores.length < 10) {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('entrar')
+        .setLabel('Entrar')
+        .setStyle(ButtonStyle.Success),
 
-      jogadores.push(message.author.id);
-      await member.roles.add(cargoFila).catch(() => {});
+      new ButtonBuilder()
+        .setCustomId('sair')
+        .setLabel('Sair')
+        .setStyle(ButtonStyle.Danger)
+    );
 
-      message.channel.send(`✅ ${message.author.username} entrou (${jogadores.length}/10)`);
-
-      if (jogadores.length === 10) {
-        filaFechada = true;
-        filaAberta = false;
-
-        message.channel.send(`🔥 Fila principal fechada!
-
-🎟️ Vá até o canal <#${canalTicket}> e abra seu ticket.
-⏱️ Você tem 10 minutos para pagar!
-
-📌 Agora a fila de espera está aberta (até 20 jogadores).`);
-
-        iniciarTimer(message.guild, message.channel);
-      }
-
-    } else if (reserva.length < 10) {
-
-      // 🕐 FILA RESERVA
-      reserva.push(message.author.id);
-
-      message.channel.send(`⏱️ ${message.author.username} entrou na fila de espera (${reserva.length}/10)`);
-
-    } else {
-      return message.reply('❌ Fila e reserva cheias!');
-    }
-  }
-
-  // ======================
-  // ❌ SAIR
-  // ======================
-
-  if (message.content === '!sair') {
-
-    if (filaFechada) {
-      return message.reply('❌ Não é possível sair após fechar!');
-    }
-
-    let index = jogadores.indexOf(message.author.id);
-
-    if (index !== -1) {
-      jogadores.splice(index, 1);
-      await member.roles.remove(cargoFila).catch(() => {});
-      return message.reply('✅ Você saiu da fila!');
-    }
-
-    index = reserva.indexOf(message.author.id);
-
-    if (index !== -1) {
-      reserva.splice(index, 1);
-      return message.reply('✅ Você saiu da fila de espera!');
-    }
-
-    return message.reply('❌ Você não está na fila!');
-  }
-
-  // ======================
-  // 📋 FILA
-  // ======================
-
-  if (message.content === '!fila') {
-
-    let texto = "📋 Fila:\n";
-
-    jogadores.forEach((id, i) => {
-      texto += `<@${id}> - ${i + 1}\n`;
+    painelMessage = await message.channel.send({
+      embeds: [embed],
+      components: [row]
     });
 
-    if (reserva.length > 0) {
-
-      texto += `\n⏱️ Fila de espera:\n`;
-
-      reserva.forEach((id, i) => {
-        texto += `<@${id}> - ${i + 11}\n`;
-      });
-
-      texto += `\n⚡ Caso alguém da fila principal não pague, o próximo da fila de espera assume automaticamente!`;
-    }
-
-    message.reply(texto);
+    message.delete().catch(() => {});
   }
 
   // ======================
@@ -177,8 +97,6 @@ client.on('messageCreate', async (message) => {
   if (message.content === '!finalizar') {
 
     if (!isAdmin) return;
-
-    if (timerPagamento) clearTimeout(timerPagamento);
 
     const membros = message.guild.members.cache;
 
@@ -191,68 +109,103 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    jogadores = [];
-    reserva = [];
-    filaAberta = false;
-    filaFechada = false;
+    fila = [];
+
+    if (painelMessage) {
+      await painelMessage.delete().catch(() => {});
+      painelMessage = null;
+    }
 
     message.channel.send(`🏁 Partida finalizada!
 
 ⚡ Quem não conseguiu entrar fica ligado, pois novas partidas serão anunciadas em breve.
 🎮 Continue acompanhando o JJ Diários para não perder as próximas!`);
   }
-
 });
 
 // ======================
-// ⏱️ TIMER
+// 🎮 BOTÕES
 // ======================
 
-function iniciarTimer(guild, channel) {
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
 
-  if (timerPagamento) clearTimeout(timerPagamento);
+  const membro = interaction.member;
 
-  timerPagamento = setTimeout(async () => {
+  // ======================
+  // ➕ ENTRAR
+  // ======================
 
-    let removidos = [];
+  if (interaction.customId === 'entrar') {
 
-    for (const id of jogadores) {
-
-      const membro = await guild.members.fetch(id);
-
-      if (!membro.roles.cache.has(cargoPago)) {
-
-        await membro.roles.remove(cargoFila).catch(() => {});
-        removidos.push(id);
-      }
+    if (fila.includes(interaction.user.id)) {
+      return interaction.reply({ content: '⚠️ Você já está na fila!', ephemeral: true });
     }
 
-    // remove quem não pagou
-    jogadores = jogadores.filter(id => !removidos.includes(id));
-
-    // 🔥 PUXA DA RESERVA
-    while (jogadores.length < 10 && reserva.length > 0) {
-
-      const novo = reserva.shift();
-      jogadores.push(novo);
-
-      const membro = await guild.members.fetch(novo);
-      await membro.roles.add(cargoFila).catch(() => {});
-
-      channel.send(`🔄 <@${novo}> entrou da fila de espera para a principal!`);
+    if (fila.length >= 10) {
+      return interaction.reply({ content: '❌ Fila cheia!', ephemeral: true });
     }
 
-    if (removidos.length > 0) {
-      channel.send(`⏰ Removidos por não pagamento:\n${removidos.map(id => `<@${id}>`).join('\n')}`);
+    fila.push(interaction.user.id);
+
+    await membro.roles.add(cargoFila).catch(() => {});
+
+    await interaction.reply({ content: '✅ Você entrou na fila!', ephemeral: true });
+  }
+
+  // ======================
+  // ➖ SAIR
+  // ======================
+
+  if (interaction.customId === 'sair') {
+
+    const index = fila.indexOf(interaction.user.id);
+
+    if (index === -1) {
+      return interaction.reply({ content: '❌ Você não está na fila!', ephemeral: true });
     }
 
-    filaAberta = true;
-    filaFechada = false;
+    fila.splice(index, 1);
 
-    channel.send('♻️ Fila reaberta!');
+    await membro.roles.remove(cargoFila).catch(() => {});
 
-  }, tempoPagamento);
-}
+    await interaction.reply({ content: '✅ Você saiu da fila!', ephemeral: true });
+  }
+
+  // ======================
+  // 🔄 ATUALIZAR EMBED
+  // ======================
+
+  if (!painelMessage) return;
+
+  const lista = fila.length > 0
+    ? fila.map((id, i) => `<@${id}> - ${i + 1}`).join('\n')
+    : "Ninguém na fila.";
+
+  const embed = new EmbedBuilder()
+    .setTitle("💰 Sala | R$5,00")
+    .setDescription(`🎮 Fila:\n${lista}`)
+    .setColor("Yellow")
+    .setFooter({ text: "💸 Prêmio: R$10 + R$3 por kill" });
+
+  await painelMessage.edit({ embeds: [embed] });
+
+  // ======================
+  // 🔥 FECHOU COM 10
+  // ======================
+
+  if (fila.length === 10) {
+
+    interaction.channel.send(`🔥 Sala fechada!
+
+🎟️ Vá até o canal <#${canalTicket}> e envie o comprovante.
+
+💸 PIX:
+${pix}
+
+⏱️ Tempo: 10 minutos`);
+  }
+});
 
 // ======================
 
