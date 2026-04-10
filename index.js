@@ -15,21 +15,27 @@ const client = new Client({
   ]
 });
 
-// ================= CONFIG =================
+// ===== CONFIG =====
 
 const cargoAdmin = "943302582816890973";
 const cargoFila = "943302704275550208";
 const cargoPago = "1489100736225870015";
 
-const canalFila = "943302732738072606";
 const canalTicket10 = "1489094389698527334";
 
 const categoriaTicket = "1492239705843171559";
 const canalLogs = "943302717865070632";
 
-const pix = "672aa93c-bae7-4c71-9711-ed676e7d3794";
+// ===== VALORES X1 =====
 
-// ==========================================
+const tabelaValores = {
+  1: "1,50",
+  3: "4,00",
+  5: "6,00",
+  10: "12,00"
+};
+
+// ===== VARIÁVEIS =====
 
 let fila = [];
 let painel = null;
@@ -39,13 +45,13 @@ let paineisX1 = {};
 
 let tickets = {};
 
-// ================= READY =================
+// ===== READY =====
 
 client.on('ready', () => {
   console.log('🤖 Bot online!');
 });
 
-// ================= COMANDOS =================
+// ===== COMANDOS =====
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
@@ -53,10 +59,13 @@ client.on('messageCreate', async (message) => {
   const isAdmin = message.member.roles.cache.has(cargoAdmin);
   if (!isAdmin) return;
 
-  // 🎮 PAINEL 10
+  // ===== PAINEL 10 =====
+
   if (message.content === '!painel') {
 
-    if (painel) return message.reply('Já existe um painel!');
+    message.delete().catch(() => {});
+
+    if (painel) return;
 
     const embed = new EmbedBuilder()
       .setTitle("💰 Sala | R$5")
@@ -71,18 +80,17 @@ client.on('messageCreate', async (message) => {
     painel = await message.channel.send({ embeds: [embed], components: [row] });
   }
 
-  // 🔥 MULTI X1
+  // ===== MULTI X1 =====
+
   if (message.content.startsWith('!x1')) {
+
+    message.delete().catch(() => {});
 
     const valor = message.content.split(' ')[1];
 
-    if (!['1', '3', '5', '10'].includes(valor)) {
-      return message.reply('Use: !x1 1 / 3 / 5 / 10');
-    }
+    if (!['1', '3', '5', '10'].includes(valor)) return;
 
-    if (paineisX1[valor]) {
-      return message.reply('Já existe painel desse valor!');
-    }
+    if (paineisX1[valor]) return;
 
     filasX1[valor] = [];
 
@@ -92,10 +100,8 @@ client.on('messageCreate', async (message) => {
       .setColor("Red");
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`entrar_x1_${valor}`)
-        .setLabel('Entrar')
-        .setStyle(ButtonStyle.Success)
+      new ButtonBuilder().setCustomId(`entrar_x1_${valor}`).setLabel('Entrar').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`sair_x1_${valor}`).setLabel('Sair').setStyle(ButtonStyle.Danger)
     );
 
     paineisX1[valor] = await message.channel.send({
@@ -104,8 +110,11 @@ client.on('messageCreate', async (message) => {
     });
   }
 
-  // 🏁 FINALIZAR
+  // ===== FINALIZAR =====
+
   if (message.content === '!finalizar') {
+
+    message.delete().catch(() => {});
 
     for (const membro of message.guild.members.cache.values()) {
 
@@ -133,7 +142,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// ================= BOTÕES =================
+// ===== BOTÕES =====
 
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
@@ -185,10 +194,7 @@ client.on('interactionCreate', async (interaction) => {
   if (fila.length === 10) {
     interaction.channel.send(`🔥 Sala fechada!
 
-🎟️ Vá até <#${canalTicket10}> e envie o comprovante.
-
-💸 PIX:
-${pix}`);
+🎟️ Vá até <#${canalTicket10}> e envie o comprovante.`);
   }
 
   // ===== MULTI X1 =====
@@ -221,7 +227,7 @@ ${pix}`);
       const p1 = await interaction.guild.members.fetch(filaAtual[0]);
       const p2 = await interaction.guild.members.fetch(filaAtual[1]);
 
-      const valorFinal = (parseFloat(valor) * 1.5).toFixed(2).replace('.', ',');
+      const valorFinal = tabelaValores[valor];
 
       const canal = await interaction.guild.channels.create({
         name: `x1-${valor}-${p1.user.username}`,
@@ -247,20 +253,66 @@ ${pix}`);
           .setStyle(ButtonStyle.Danger)
       );
 
+      const embed = new EmbedBuilder()
+        .setTitle(`🔥 X1 DE R$${valor} FORMADO!`)
+        .setDescription(`${p1} 🆚 ${p2}`)
+        .addFields(
+          { name: "💸 Valor da partida", value: `R$${valorFinal}`, inline: true },
+          { name: "📩 Pagamento", value: "Aguarde um admin enviar o PIX.", inline: true }
+        )
+        .setColor("Red");
+
       canal.send({
-        content: `🔥 X1 DE R$${valor} FORMADO!
-
-${p1} vs ${p2}
-
-💸 Valor: R$${valorFinal}
-
-💰 PIX:
-${pix}`,
+        embeds: [embed],
         components: [row]
       });
 
       filasX1[valor] = [];
+
+      // 🔥 RESET VISUAL
+      await paineisX1[valor].edit({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(`🔥 X1 | R$${valor}`)
+            .setDescription("👥 Fila:\nNinguém na fila.")
+            .setColor("Red")
+        ]
+      });
     }
+  }
+
+  // ===== SAIR X1 =====
+
+  if (interaction.customId.startsWith('sair_x1_')) {
+
+    const valor = interaction.customId.split('_')[2];
+    const filaAtual = filasX1[valor];
+
+    const index = filaAtual.indexOf(interaction.user.id);
+
+    if (index === -1) {
+      return interaction.reply({ content: 'Você não está na fila!', ephemeral: true });
+    }
+
+    if (filaAtual.length >= 2) {
+      return interaction.reply({ content: 'X1 já formado!', ephemeral: true });
+    }
+
+    filaAtual.splice(index, 1);
+
+    await interaction.reply({ content: 'Saiu da fila!', ephemeral: true });
+
+    const lista = filaAtual.length
+      ? filaAtual.map((id, i) => `<@${id}> - ${i + 1}`).join('\n')
+      : "Ninguém na fila.";
+
+    await paineisX1[valor].edit({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle(`🔥 X1 | R$${valor}`)
+          .setDescription(`👥 Fila:\n${lista}`)
+      ]
+    });
   }
 
   // ===== FECHAR TICKET =====
@@ -286,7 +338,7 @@ ${pix}`,
       .addFields(
         { name: "👮 Admin", value: `${interaction.user}` },
         { name: "👥 Jogadores", value: jogadores },
-        { name: "💸 Valor", value: `R$${valor}` },
+        { name: "💸 X1", value: `R$${valor}` },
         { name: "📅 Data", value: `<t:${Math.floor(Date.now()/1000)}:F>` }
       )
       .setColor("Red");
@@ -302,6 +354,6 @@ ${pix}`,
   }
 });
 
-// ================= LOGIN =================
+// ===== LOGIN =====
 
 client.login(process.env.TOKEN);
