@@ -43,22 +43,16 @@ let tickets = {};
 let paineisX1 = {};
 let painel = null;
 
-// ===== JSON =====
+// ===== SALVAR (ASSÍNCRONO) =====
 function salvar() {
-  fs.writeFileSync('dados.json', JSON.stringify({ fila, filasX1, tickets }, null, 2));
+  fs.writeFile('dados.json',
+    JSON.stringify({ fila, filasX1, tickets }, null, 2),
+    () => {}
+  );
 }
-
-function carregar() {
-  if (!fs.existsSync('dados.json')) return;
-  const d = JSON.parse(fs.readFileSync('dados.json'));
-  fila = d.fila || [];
-  filasX1 = d.filasX1 || {};
-  tickets = d.tickets || {};
-}
-carregar();
 
 // ===== READY =====
-client.on('clientReady', () => console.log('ON'));
+client.on('clientReady', () => console.log('⚡ RÁPIDO ON'));
 
 // ===== COMANDOS =====
 client.on('messageCreate', async (msg) => {
@@ -66,10 +60,10 @@ client.on('messageCreate', async (msg) => {
   if (!msg.member.roles.cache.has(cargoAdmin)) return;
 
   if (msg.content === '!painel') {
-    await msg.delete().catch(()=>{});
+    msg.delete().catch(()=>{});
 
     const embed = new EmbedBuilder()
-      .setTitle("💰 Sala")
+      .setTitle("💰 Sala | R$5")
       .setDescription("Ninguém na fila.");
 
     const row = new ActionRowBuilder().addComponents(
@@ -81,13 +75,13 @@ client.on('messageCreate', async (msg) => {
   }
 
   if (msg.content === '!finalizar') {
-    await msg.delete().catch(()=>{});
+    msg.delete().catch(()=>{});
 
     fila = [];
     salvar();
 
     if (painel) {
-      await painel.delete().catch(()=>{});
+      painel.delete().catch(()=>{});
       painel = null;
     }
 
@@ -95,11 +89,9 @@ client.on('messageCreate', async (msg) => {
   }
 
   if (msg.content.startsWith('!x1')) {
-    await msg.delete().catch(()=>{});
+    msg.delete().catch(()=>{});
 
     const valor = msg.content.split(' ')[1];
-    if (!['1','3','5','10'].includes(valor)) return;
-
     filasX1[valor] = [];
     salvar();
 
@@ -121,46 +113,80 @@ client.on('messageCreate', async (msg) => {
 client.on('interactionCreate', async (i) => {
   if (!i.isButton()) return;
 
-  try { await i.deferReply({ ephemeral:true }); } catch {}
-
   try {
+    // ⚡ RESPOSTA INSTANTÂNEA
+    await i.reply({ content: '✔️', ephemeral: true });
 
-    // ===== X1 ENTRAR =====
+    // ===== SALA =====
+    if (i.customId === 'entrar') {
+      if (!fila.includes(i.user.id)) fila.push(i.user.id);
+
+      salvar();
+
+      setTimeout(async () => {
+        try {
+          await i.member.roles.add(cargoFila).catch(()=>{});
+
+          if (painel) {
+            const lista = fila.map(id=>`<@${id}>`).join('\n') || "Ninguém na fila.";
+            await painel.edit({
+              embeds:[new EmbedBuilder().setTitle("💰 Sala | R$5").setDescription(lista)]
+            });
+          }
+        } catch {}
+      }, 0);
+    }
+
+    if (i.customId === 'sair') {
+      fila = fila.filter(id => id !== i.user.id);
+      salvar();
+
+      setTimeout(async () => {
+        try {
+          await i.member.roles.remove(cargoFila).catch(()=>{});
+
+          if (painel) {
+            const lista = fila.map(id=>`<@${id}>`).join('\n') || "Ninguém na fila.";
+            await painel.edit({
+              embeds:[new EmbedBuilder().setTitle("💰 Sala | R$5").setDescription(lista)]
+            });
+          }
+        } catch {}
+      }, 0);
+    }
+
+    // ===== X1 =====
     if (i.customId.startsWith('entrar_x1_')) {
 
       const valor = i.customId.split('_')[2];
       const filaAtual = filasX1[valor] || [];
 
-      if (filaAtual.includes(i.user.id))
-        return i.editReply('Já entrou.');
-
-      filaAtual.push(i.user.id);
-      filasX1[valor] = filaAtual;
-      salvar();
-
-      await i.editReply('Entrou no X1.');
+      if (!filaAtual.includes(i.user.id)) {
+        filaAtual.push(i.user.id);
+        filasX1[valor] = filaAtual;
+        salvar();
+      }
 
       // atualizar painel
-      try {
-        const lista = filaAtual.length
-          ? filaAtual.map(id=>`<@${id}>`).join('\n')
-          : "Ninguém na fila.";
+      setTimeout(async () => {
+        try {
+          const lista = filaAtual.map(id=>`<@${id}>`).join('\n') || "Ninguém na fila.";
 
-        if (paineisX1[valor]) {
-          await paineisX1[valor].edit({
-            embeds:[new EmbedBuilder()
-              .setTitle(`🔥1x1 | R$${valor}`)
-              .setDescription(lista)
-              .setColor("#1989e2")]
-          });
-        }
-      } catch {}
+          if (paineisX1[valor]) {
+            await paineisX1[valor].edit({
+              embeds:[new EmbedBuilder()
+                .setTitle(`🔥1x1 | R$${valor}`)
+                .setDescription(lista)
+                .setColor("#1989e2")]
+            });
+          }
+        } catch {}
+      }, 0);
 
-      // formar x1
+      // formar X1
       if (filaAtual.length === 2) {
 
-        const p1 = await i.guild.members.fetch(filaAtual[0]);
-        const p2 = await i.guild.members.fetch(filaAtual[1]);
+        const [id1, id2] = filaAtual;
 
         const canal = await i.guild.channels.create({
           name: `x1-${valor}`,
@@ -168,21 +194,20 @@ client.on('interactionCreate', async (i) => {
           parent: categoriaTicket,
           permissionOverwrites: [
             { id: i.guild.id, deny: ['ViewChannel'] },
-            { id: p1.id, allow: ['ViewChannel', 'SendMessages'] },
-            { id: p2.id, allow: ['ViewChannel', 'SendMessages'] },
+            { id: id1, allow: ['ViewChannel','SendMessages'] },
+            { id: id2, allow: ['ViewChannel','SendMessages'] },
             { id: cargoAdmin, allow: ['ViewChannel'] }
           ]
         });
 
         tickets[canal.id] = {
-          jogadores: [p1.id, p2.id],
+          jogadores:[id1,id2],
           valor,
-          confirmados: []
+          confirmados:[]
         };
-
         salvar();
 
-        await canal.send(`<@${p1.id}> <@${p2.id}>`);
+        await canal.send(`<@${id1}> <@${id2}>`);
 
         const embed = new EmbedBuilder()
           .setTitle(`🔥1x1 | R$${valor}`)
@@ -202,7 +227,6 @@ client.on('interactionCreate', async (i) => {
         filasX1[valor] = [];
         salvar();
 
-        // reset painel
         if (paineisX1[valor]) {
           await paineisX1[valor].edit({
             embeds:[new EmbedBuilder()
@@ -218,30 +242,23 @@ client.on('interactionCreate', async (i) => {
     if (i.customId === 'confirmar_x1') {
 
       const dados = tickets[i.channel.id];
-      if (!dados) return i.editReply('Erro.');
-
-      if (!dados.jogadores.includes(i.user.id))
-        return i.editReply('Você não participa.');
+      if (!dados) return;
 
       if (!dados.confirmados.includes(i.user.id)) {
         dados.confirmados.push(i.user.id);
         salvar();
       }
 
-      const confirmados = dados.confirmados.length
-        ? dados.confirmados.map(id=>`<@${id}>`).join('\n')
-        : "Nenhum jogador confirmou ainda.";
+      const confirmados = dados.confirmados.map(id=>`<@${id}>`).join('\n') || "Nenhum";
 
-      const embed = new EmbedBuilder()
-        .setTitle(`🔥1x1 | R$${dados.valor}`)
-        .setDescription("📜 Leia as regras antes de confirmar")
-        .addFields({ name:"Confirmados:", value:confirmados })
-        .setColor("#1989e2");
+      await i.message.edit({
+        embeds:[new EmbedBuilder()
+          .setTitle(`🔥1x1 | R$${dados.valor}`)
+          .setDescription("📜 Leia as regras antes de confirmar")
+          .addFields({ name:"Confirmados:", value:confirmados })
+          .setColor("#1989e2")]
+      });
 
-      await i.message.edit({ embeds:[embed] });
-      await i.editReply('Confirmado.');
-
-      // ambos confirmaram
       if (dados.confirmados.length === 2) {
 
         const embedFinal = new EmbedBuilder()
@@ -254,8 +271,7 @@ client.on('interactionCreate', async (i) => {
           .setColor("#1989e2");
 
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('fechar_ticket')
+          new ButtonBuilder().setCustomId('fechar_ticket')
             .setLabel('Fechar Ticket')
             .setStyle(ButtonStyle.Danger)
         );
@@ -268,22 +284,8 @@ client.on('interactionCreate', async (i) => {
       }
     }
 
-    // ===== CANCELAR =====
-    if (i.customId === 'cancelar_x1') {
-
-      delete tickets[i.channel.id];
-      salvar();
-
-      await i.editReply('X1 cancelado.');
-
-      setTimeout(()=> i.channel.delete().catch(()=>{}), 2000);
-    }
-
     // ===== FECHAR =====
     if (i.customId === 'fechar_ticket') {
-
-      if (!i.member.roles.cache.has(cargoAdmin))
-        return i.editReply('Apenas admin.');
 
       const dados = tickets[i.channel.id];
       if (!dados) return;
@@ -291,33 +293,36 @@ client.on('interactionCreate', async (i) => {
       const msgs = await i.channel.messages.fetch({ limit:100 });
 
       const texto = msgs.reverse().map(m =>
-        `${m.author.tag}: ${m.content}`
+        `[${m.author.tag}] ${m.content}`
       ).join('\n');
 
-      const buffer = Buffer.from(texto,'utf-8');
+      const buffer = Buffer.from(texto);
+
+      const embed = new EmbedBuilder()
+        .setTitle("📁 Ticket Fechado")
+        .addFields(
+          { name:"Jogadores", value: dados.jogadores.map(id=>`<@${id}>`).join(', ') },
+          { name:"Valor", value:`R$${dados.valor}` }
+        );
 
       const log = await client.channels.fetch(canalLogs);
 
       await log.send({
-        content:`Ticket fechado | R$${dados.valor}`,
-        files:[{ attachment:buffer, name:'log.txt' }]
+        embeds:[embed],
+        files:[{ attachment:buffer, name:'transcricao.txt' }]
       });
 
       delete tickets[i.channel.id];
       salvar();
 
-      await i.editReply('Fechando...');
-
       setTimeout(()=> i.channel.delete().catch(()=>{}), 3000);
     }
 
   } catch (err) {
-    console.log(err);
-    try { i.editReply('Erro interno.'); } catch {}
+    console.log("ERRO:", err);
   }
 });
 
-// ===== ANTI CRASH =====
 process.on('uncaughtException', console.error);
 process.on('unhandledRejection', console.error);
 
