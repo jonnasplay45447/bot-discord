@@ -4,7 +4,8 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  ChannelType
 } = require('discord.js');
 
 const fs = require('fs');
@@ -118,10 +119,7 @@ client.on('messageCreate', async (message) => {
       painel = null;
     }
 
-    message.channel.send(`🏁 **Partida finalizada!**
-
-⚡ Quem não conseguiu entrar fica ligado, pois novas partidas serão anunciadas em breve.
-🎮 Continue acompanhando o JJ Diários para não perder as próximas!`);
+    message.channel.send(`🏁 **Partida finalizada!**`);
   }
 
   // ===== X1 =====
@@ -157,29 +155,33 @@ client.on('interactionCreate', async (interaction) => {
 
     // ===== SALA 10 =====
     if (interaction.customId === 'entrar') {
+      await interaction.deferReply({ ephemeral: true });
+
       if (fila.includes(interaction.user.id))
-        return interaction.reply({ content: 'Já está na fila!', ephemeral: true });
+        return interaction.editReply('Já está na fila!');
 
       if (fila.length >= 10)
-        return interaction.reply({ content: 'Fila cheia!', ephemeral: true });
+        return interaction.editReply('Fila cheia!');
 
       fila.push(interaction.user.id);
       salvarDados();
 
       await membro.roles.add(cargoFila).catch(() => {});
-      await interaction.reply({ content: 'Entrou!', ephemeral: true });
+      await interaction.editReply('Entrou!');
     }
 
     if (interaction.customId === 'sair') {
+      await interaction.deferReply({ ephemeral: true });
+
       const index = fila.indexOf(interaction.user.id);
       if (index === -1)
-        return interaction.reply({ content: 'Não está na fila!', ephemeral: true });
+        return interaction.editReply('Não está na fila!');
 
       fila.splice(index, 1);
       salvarDados();
 
       await membro.roles.remove(cargoFila).catch(() => {});
-      await interaction.reply({ content: 'Saiu!', ephemeral: true });
+      await interaction.editReply('Saiu!');
     }
 
     if (painel) {
@@ -192,33 +194,42 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    if (fila.length === 10) {
-      interaction.channel.send(`🔥 Sala fechada!\n🎟️ Vá até <#${canalTicket10}>`);
-    }
-
-    // ===== X1 =====
+    // ===== X1 ENTRAR =====
     if (interaction.customId.startsWith('entrar_x1_')) {
+      await interaction.deferReply({ ephemeral: true });
 
       const valor = interaction.customId.split('_')[2];
       const filaAtual = filasX1[valor] || [];
 
       if (filaAtual.includes(interaction.user.id))
-        return interaction.reply({ content: 'Já entrou!', ephemeral: true });
+        return interaction.editReply('Já entrou!');
 
       filaAtual.push(interaction.user.id);
       filasX1[valor] = filaAtual;
       salvarDados();
 
-      await interaction.reply({ content: 'Entrou no X1', ephemeral: true });
+      await interaction.editReply('Entrou no X1');
+
+      const lista = filaAtual.length
+        ? filaAtual.map(id => `<@${id}>`).join('\n')
+        : "Ninguém na fila.";
+
+      if (paineisX1[valor]) {
+        await paineisX1[valor].edit({
+          embeds: [new EmbedBuilder()
+            .setTitle(`🔥1x1 | R$${valor}`)
+            .setDescription(lista)
+            .setColor("#1989e2")]
+        });
+      }
 
       if (filaAtual.length === 2) {
-
         const p1 = await interaction.guild.members.fetch(filaAtual[0]);
         const p2 = await interaction.guild.members.fetch(filaAtual[1]);
 
         const canal = await interaction.guild.channels.create({
           name: `x1-${valor}`,
-          type: 0,
+          type: ChannelType.GuildText,
           parent: categoriaTicket,
           permissionOverwrites: [
             { id: interaction.guild.id, deny: ['ViewChannel'] },
@@ -253,63 +264,105 @@ client.on('interactionCreate', async (interaction) => {
             .setURL(`https://discord.com/channels/${servidorID}/${canalRegrasX1}`)
         );
 
-        const msg = await canal.send({ embeds: [embed], components: [row] });
-
-        tickets[canal.id].mensagem = msg.id;
-        salvarDados();
+        await canal.send({ embeds: [embed], components: [row] });
 
         filasX1[valor] = [];
         salvarDados();
+
+        // reset painel
+        if (paineisX1[valor]) {
+          await paineisX1[valor].edit({
+            embeds: [new EmbedBuilder()
+              .setTitle(`🔥1x1 | R$${valor}`)
+              .setDescription("Ninguém na fila.")
+              .setColor("#1989e2")]
+          });
+        }
       }
     }
 
-    // ===== FECHAR TICKET =====
-    if (interaction.customId === 'fechar_ticket') {
+    // ===== X1 SAIR =====
+    if (interaction.customId.startsWith('sair_x1_')) {
+      await interaction.deferReply({ ephemeral: true });
 
-      if (!interaction.member.roles.cache.has(cargoAdmin))
-        return interaction.reply({ content: 'Apenas admins!', ephemeral: true });
+      const valor = interaction.customId.split('_')[2];
+      const filaAtual = filasX1[valor] || [];
+
+      const index = filaAtual.indexOf(interaction.user.id);
+      if (index === -1)
+        return interaction.editReply('Você não está na fila!');
+
+      filaAtual.splice(index, 1);
+      filasX1[valor] = filaAtual;
+      salvarDados();
+
+      await interaction.editReply('Saiu do X1');
+
+      const lista = filaAtual.length
+        ? filaAtual.map(id => `<@${id}>`).join('\n')
+        : "Ninguém na fila.";
+
+      if (paineisX1[valor]) {
+        await paineisX1[valor].edit({
+          embeds: [new EmbedBuilder()
+            .setTitle(`🔥1x1 | R$${valor}`)
+            .setDescription(lista)
+            .setColor("#1989e2")]
+        });
+      }
+    }
+
+    // ===== CONFIRMAR =====
+    if (interaction.customId === 'confirmar_x1') {
+      await interaction.deferUpdate();
 
       const dados = tickets[interaction.channel.id];
       if (!dados) return;
 
-      await interaction.reply('📁 Salvando e fechando...');
+      if (!dados.confirmados.includes(interaction.user.id)) {
+        dados.confirmados.push(interaction.user.id);
+        salvarDados();
+      }
 
-      const mensagens = await interaction.channel.messages.fetch({ limit: 200 });
-
-      const texto = mensagens.reverse().map(m =>
-        `[${new Date(m.createdTimestamp).toLocaleString('pt-BR')}] ${m.author.tag}: ${m.content || "[embed]"}`
-      ).join('\n');
-
-      const buffer = Buffer.from(texto, 'utf-8');
-
-      const log = await client.channels.fetch(canalLogs);
+      const confirmados = dados.confirmados.length
+        ? dados.confirmados.map(id => `<@${id}>`).join('\n')
+        : "Nenhum jogador confirmou ainda.";
 
       const embed = new EmbedBuilder()
-        .setTitle("📁 Ticket Fechado")
-        .addFields(
-          { name: "👮 Admin", value: `${interaction.user}` },
-          { name: "👥 Jogadores", value: dados.jogadores.map(id => `<@${id}>`).join(', ') },
-          { name: "💸 X1", value: `R$${dados.valor}` },
-          { name: "📅 Data", value: new Date().toLocaleString('pt-BR') }
-        )
+        .setTitle(`🔥1x1 | R$${dados.valor}`)
+        .setDescription("📜 Leia as regras antes de confirmar")
+        .addFields({ name: "Confirmados:", value: confirmados })
         .setColor("#1989e2");
 
-      await log.send({
-        embeds: [embed],
-        files: [{ attachment: buffer, name: `transcricao-${interaction.channel.name}.txt` }]
-      });
+      await interaction.message.edit({ embeds: [embed] });
+    }
+
+    // ===== CANCELAR =====
+    if (interaction.customId === 'cancelar_x1') {
+      await interaction.deferReply({ ephemeral: true });
 
       delete tickets[interaction.channel.id];
       salvarDados();
 
+      await interaction.editReply('X1 cancelado.');
+
       setTimeout(() => {
         interaction.channel.delete().catch(() => {});
-      }, 3000);
+      }, 2000);
     }
 
   } catch (err) {
     console.log("ERRO:", err);
   }
+});
+
+// ===== ANTI-CRASH =====
+process.on('uncaughtException', err => {
+  console.error('ERRO CRÍTICO:', err);
+});
+
+process.on('unhandledRejection', err => {
+  console.error('PROMISE NÃO TRATADA:', err);
 });
 
 client.login(process.env.TOKEN);
