@@ -43,7 +43,7 @@ let tickets = {};
 let paineisX1 = {};
 let painel = null;
 
-// ===== SALVAR (ASSÍNCRONO) =====
+// ===== SALVAR =====
 function salvar() {
   fs.writeFile('dados.json',
     JSON.stringify({ fila, filasX1, tickets }, null, 2),
@@ -114,21 +114,18 @@ client.on('interactionCreate', async (i) => {
   if (!i.isButton()) return;
 
   try {
-    // ⚡ RESPOSTA INSTANTÂNEA
     await i.reply({ content: '✔️', ephemeral: true });
 
     // ===== SALA =====
     if (i.customId === 'entrar') {
       if (!fila.includes(i.user.id)) fila.push(i.user.id);
-
       salvar();
 
       setTimeout(async () => {
         try {
           await i.member.roles.add(cargoFila).catch(()=>{});
-
           if (painel) {
-            const lista = fila.map(id=>`<@${id}>`).join('\n') || "Ninguém na fila.";
+            const lista = fila.length ? fila.map(id=>`<@${id}>`).join('\n') : "Ninguém na fila.";
             await painel.edit({
               embeds:[new EmbedBuilder().setTitle("💰 Sala | R$5").setDescription(lista)]
             });
@@ -144,9 +141,8 @@ client.on('interactionCreate', async (i) => {
       setTimeout(async () => {
         try {
           await i.member.roles.remove(cargoFila).catch(()=>{});
-
           if (painel) {
-            const lista = fila.map(id=>`<@${id}>`).join('\n') || "Ninguém na fila.";
+            const lista = fila.length ? fila.map(id=>`<@${id}>`).join('\n') : "Ninguém na fila.";
             await painel.edit({
               embeds:[new EmbedBuilder().setTitle("💰 Sala | R$5").setDescription(lista)]
             });
@@ -155,11 +151,11 @@ client.on('interactionCreate', async (i) => {
       }, 0);
     }
 
-    // ===== X1 =====
+    // ===== X1 ENTRAR =====
     if (i.customId.startsWith('entrar_x1_')) {
 
       const valor = i.customId.split('_')[2];
-      const filaAtual = filasX1[valor] || [];
+      let filaAtual = filasX1[valor] || [];
 
       if (!filaAtual.includes(i.user.id)) {
         filaAtual.push(i.user.id);
@@ -167,11 +163,9 @@ client.on('interactionCreate', async (i) => {
         salvar();
       }
 
-      // atualizar painel
       setTimeout(async () => {
         try {
-          const lista = filaAtual.map(id=>`<@${id}>`).join('\n') || "Ninguém na fila.";
-
+          const lista = filaAtual.length ? filaAtual.map(id=>`<@${id}>`).join('\n') : "Ninguém na fila.";
           if (paineisX1[valor]) {
             await paineisX1[valor].edit({
               embeds:[new EmbedBuilder()
@@ -183,7 +177,6 @@ client.on('interactionCreate', async (i) => {
         } catch {}
       }, 0);
 
-      // formar X1
       if (filaAtual.length === 2) {
 
         const [id1, id2] = filaAtual;
@@ -200,11 +193,7 @@ client.on('interactionCreate', async (i) => {
           ]
         });
 
-        tickets[canal.id] = {
-          jogadores:[id1,id2],
-          valor,
-          confirmados:[]
-        };
+        tickets[canal.id] = { jogadores:[id1,id2], valor, confirmados:[] };
         salvar();
 
         await canal.send(`<@${id1}> <@${id2}>`);
@@ -238,6 +227,60 @@ client.on('interactionCreate', async (i) => {
       }
     }
 
+    // ===== X1 SAIR (CORRIGIDO) =====
+    if (i.customId.startsWith('sair_x1_')) {
+
+      const valor = i.customId.split('_')[2];
+      let filaAtual = filasX1[valor] || [];
+
+      if (!filaAtual.includes(i.user.id)) {
+        return i.followUp({ content: 'Você não está na fila.', ephemeral: true });
+      }
+
+      filaAtual = filaAtual.filter(id => id !== i.user.id);
+      filasX1[valor] = filaAtual;
+      salvar();
+
+      setTimeout(async () => {
+        try {
+          const lista = filaAtual.length ? filaAtual.map(id=>`<@${id}>`).join('\n') : "Ninguém na fila.";
+          if (paineisX1[valor]) {
+            await paineisX1[valor].edit({
+              embeds:[new EmbedBuilder()
+                .setTitle(`🔥1x1 | R$${valor}`)
+                .setDescription(lista)
+                .setColor("#1989e2")]
+            });
+          }
+        } catch {}
+      }, 0);
+    }
+
+    // ===== CANCELAR (CORRIGIDO) =====
+    if (i.customId === 'cancelar_x1') {
+
+      const dados = tickets[i.channel.id];
+
+      if (!dados) {
+        return i.followUp({ content: 'Esse X1 não existe mais.', ephemeral: true });
+      }
+
+      if (!dados.jogadores.includes(i.user.id)) {
+        return i.followUp({ content: 'Você não participa desse X1.', ephemeral: true });
+      }
+
+      delete tickets[i.channel.id];
+      salvar();
+
+      try {
+        await i.channel.send('🚫 O X1 foi cancelado.');
+      } catch {}
+
+      setTimeout(() => {
+        i.channel.delete().catch(()=>{});
+      }, 2000);
+    }
+
     // ===== CONFIRMAR =====
     if (i.customId === 'confirmar_x1') {
 
@@ -249,7 +292,9 @@ client.on('interactionCreate', async (i) => {
         salvar();
       }
 
-      const confirmados = dados.confirmados.map(id=>`<@${id}>`).join('\n') || "Nenhum";
+      const confirmados = dados.confirmados.length
+        ? dados.confirmados.map(id=>`<@${id}>`).join('\n')
+        : "Nenhum jogador confirmou ainda.";
 
       await i.message.edit({
         embeds:[new EmbedBuilder()
